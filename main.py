@@ -3,7 +3,8 @@
 Deterministic, stdlib-only, no network. Copies the bundled entry.png
 (a newspaper front page generated fresh for this entry) to
 $MAKEFUN_OUTPUT_DIR/entry.png (default /output), verifying its SHA-256
-before writing so both runs produce byte-identical output.
+before writing and re-verifying the written file afterwards, so both
+runs produce byte-identical output.
 """
 
 import hashlib
@@ -25,7 +26,21 @@ def main() -> int:
     out_dir = Path(os.environ.get("MAKEFUN_OUTPUT_DIR", "/output"))
     out_dir.mkdir(parents=True, exist_ok=True)
     target = out_dir / "entry.png"
-    target.write_bytes(data)
+    # Deterministic byte write: single binary write of the verified bytes.
+    with target.open("wb") as fh:
+        fh.write(data)
+        fh.flush()
+    # Post-write validation: re-read the file we just wrote and confirm
+    # it is byte-identical to the verified source.
+    written = target.read_bytes()
+    written_digest = hashlib.sha256(written).hexdigest()
+    if written != data or written_digest != EXPECTED_SHA256:
+        print(
+            f"output verification failed: wrote {len(written)} bytes, "
+            f"sha256 {written_digest}",
+            file=sys.stderr,
+        )
+        return 1
     print(f"wrote {target} ({len(data)} bytes, sha256 {digest})")
     return 0
 
